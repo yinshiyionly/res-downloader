@@ -2,14 +2,8 @@ name: Build Wails App
 
 on:
   push:
-    branches:
-      - main
     paths:
-      - '.github/workflows/main.yml'
-  pull_request:
-    branches:
-      - main
-      
+      - '.github/workflows/main.yml' 
 jobs:
   build:
     strategy:
