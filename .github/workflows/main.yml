@@ -1,0 +1,80 @@
+name: Build Wails App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest] # macOS 和 Windows 平台
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # 适当的 Go 版本
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # 适当的 Node.js 版本
+
+      - name: Install Wails
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Install Dependencies
+        run: |
+          npm install
+          go mod tidy
+
+      # macOS 构建
+      - name: Build for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          wails build -platform "darwin/universal"
+          brew install create-dmg
+          create-dmg 'build/bin/res-downloader.app' --overwrite ./build/bin
+          mv -f "build/bin/res-downloader $(jq -r '.info.productVersion' wails.json).dmg" \
+                "build/bin/res-downloader_$(jq -r '.info.productVersion' wails.json).dmg"
+
+      # Windows 构建
+      - name: Build for Windows (x64)
+        if: matrix.os == 'windows-latest'
+        run: |
+          wails build -f -nsis -platform "windows/amd64" -webview2 Embed
+          mv -f "build/bin/res-downloader-amd64-installer.exe" \
+                "build/bin/res-downloader_$(jq -r '.info.productVersion' wails.json)_win_x64.exe"
+
+      - name: Build for Windows (ARM64)
+        if: matrix.os == 'windows-latest'
+        run: |
+          wails build -f -nsis -platform "windows/arm64" -webview2 Embed
+          mv -f "build/bin/res-downloader-arm64-installer.exe" \
+                "build/bin/res-downloader_$(jq -r '.info.productVersion' wails.json)_win_arm.exe"
+
+      # 上传构建产物
+      - name: Upload Artifacts (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: res-downloader-mac
+          path: build/bin/res-downloader_*.dmg
+
+      - name: Upload Artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: res-downloader-windows
+          path: build/bin/res-downloader_*.exe
